@@ -1,4 +1,6 @@
-from mqtt_as import LINUX
+from sys import platform
+
+LINUX = platform == 'linux'
 
 
 if LINUX is False:

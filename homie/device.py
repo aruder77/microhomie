@@ -26,12 +26,14 @@ from homie.constants import (
     EXT_STATS,
 )
 from machine import RTC, reset
-from mqtt_as import LINUX, MQTTClient
+from mqtt_as import MQTTClient, config
 from uasyncio import sleep_ms
 from ubinascii import hexlify
 from utime import time
 from primitives import launch
 from primitives.message import Message
+
+LINUX = platform == 'linux'
 
 
 def get_unique_id():
@@ -46,6 +48,8 @@ def get_unique_id():
 
 # Decorator to block async tasks until the device is in "ready" state
 _MESSAGE = Message()
+
+
 def await_ready_state(func):
     def new_gen(*args, **kwargs):
         # fmt: off
@@ -86,28 +90,29 @@ class HomieDevice:
         # Device base topic
         self.dtopic = "{}/{}".format(self.btopic, self.device_id)
 
+        config['client_id'] = self.device_id
+        config['server'] = settings.MQTT_BROKER
+        config['port'] = getattr(settings, "MQTT_PORT", 1883)
+        config['user'] = getattr(settings, "MQTT_USERNAME", None)
+        config['password'] = getattr(settings, "MQTT_PASSWORD", None)
+        config['keepalive'] = getattr(settings, "MQTT_KEEPALIVE", 30)
+        config['ping_interval'] = getattr(settings, "MQTT_PING_INTERVAL", 0)
+        config['ssl'] = getattr(settings, "MQTT_SSL", False)
+        config['ssl_params'] = getattr(settings, "MQTT_SSL_PARAMS", {})
+        config['response_time'] = getattr(settings, "MQTT_RESPONSE_TIME", 10)
+        config['clean_init'] = getattr(settings, "MQTT_CLEAN_INIT", True)
+        config['clean'] = getattr(settings, "MQTT_CLEAN", True)
+        config['max_repubs'] = getattr(settings, "MQTT_MAX_REPUBS", 4)
+        config['will'] = ("{}/{}".format(self.dtopic,
+                          DEVICE_STATE), "lost", True, QOS)
+        config['subs_cb'] = self.subs_cb
+        config['wifi_coro'] = None
+        config['connect_coro'] = self.connection_handler
+        config['ssid'] = getattr(settings, "WIFI_SSID", None)
+        config['wifi_pw'] = getattr(settings, "WIFI_PASSWORD", None)
+
         # mqtt_as client
-        self.mqtt = MQTTClient(
-            client_id=self.device_id,
-            server=settings.MQTT_BROKER,
-            port=getattr(settings, "MQTT_PORT", 1883),
-            user=getattr(settings, "MQTT_USERNAME", None),
-            password=getattr(settings, "MQTT_PASSWORD", None),
-            keepalive=getattr(settings, "MQTT_KEEPALIVE", 30),
-            ping_interval=getattr(settings, "MQTT_PING_INTERVAL", 0),
-            ssl=getattr(settings, "MQTT_SSL", False),
-            ssl_params=getattr(settings, "MQTT_SSL_PARAMS", {}),
-            response_time=getattr(settings, "MQTT_RESPONSE_TIME", 10),
-            clean_init=getattr(settings, "MQTT_CLEAN_INIT", True),
-            clean=getattr(settings, "MQTT_CLEAN", True),
-            max_repubs=getattr(settings, "MQTT_MAX_REPUBS", 4),
-            will=("{}/{}".format(self.dtopic, DEVICE_STATE), "lost", True, QOS),
-            subs_cb=self.subs_cb,
-            wifi_coro=None,
-            connect_coro=self.connection_handler,
-            ssid=getattr(settings, "WIFI_SSID", None),
-            wifi_pw=getattr(settings, "WIFI_PASSWORD", None),
-        )
+        self.mqtt = MQTTClient(config)
 
     def add_node(self, node):
         node.device = self
@@ -136,6 +141,8 @@ class HomieDevice:
 
     async def connection_handler(self, client):
         """subscribe to all registered device and node topics"""
+        self.dprint("CONNECTION_HANDLER!")
+
         if not self.first_start:
             await self.publish("{}/{}".format(self.dtopic, DEVICE_STATE), STATE_RECOVER)
 
