@@ -107,7 +107,6 @@ class HomieDevice:
         config['will'] = ("{}/{}".format(self.dtopic,
                           DEVICE_STATE), "lost", True, QOS)
         config['subs_cb'] = self.subs_cb
-        config['wifi_coro'] = None
         config['connect_coro'] = self.connection_handler
         config['ssid'] = getattr(settings, "WIFI_SSID", None)
         config['wifi_pw'] = getattr(settings, "WIFI_PASSWORD", None)
